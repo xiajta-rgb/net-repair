@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>网络诊断</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="header-left">
+                <h1>网络诊断修复工具</h1>
+                <p>Network Diagnostic Tool</p>
+            </div>
+            <div class="header-right">
+                <div class="time" id="scanTime">-</div>
+                <button class="btn-primary" id="btnStart" onclick="runDiagnostic()">开始检测</button>
+            </div>
+        </header>
+
+        <div class="main-grid">
+            <div class="left-panel">
+                <div class="status-row">
+                    <div class="status-card">
+                        <div class="status-label">本机 IP</div>
+                        <div class="status-value" id="localIP">-</div>
+                    </div>
+                    <div class="status-card">
+                        <div class="status-label">网关</div>
+                        <div class="status-value" id="gatewayStatus">-</div>
+                    </div>
+                    <div class="status-card">
+                        <div class="status-label">公网</div>
+                        <div class="status-value" id="publicStatus">-</div>
+                    </div>
+                </div>
+
+                <div class="progress-card">
+                    <div class="progress-header">
+                        <span class="progress-label">检测进度</span>
+                        <span class="progress-percent" id="progressPercent">0%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <div class="progress-steps">
+                        <div class="step-item pending" id="step1"><div class="step-icon">1</div><span>网络</span></div>
+                        <div class="step-item pending" id="step2"><div class="step-icon">2</div><span>DNS</span></div>
+                        <div class="step-item pending" id="step3"><div class="step-icon">3</div><span>端口</span></div>
+                        <div class="step-item pending" id="step4"><div class="step-icon">4</div><span>Git</span></div>
+                        <div class="step-item pending" id="step5"><div class="step-icon">5</div><span>完成</span></div>
+                    </div>
+                    <div class="current-task" id="currentTask">
+                        <div class="current-task-label">正在检查</div>
+                        <div class="current-task-name" id="currentTaskName">-</div>
+                        <div class="current-task-detail" id="currentTaskDetail">-</div>
+                    </div>
+                </div>
+
+                <div class="results-card">
+                    <div class="results-header">
+                        <div class="results-title">
+                            详细结果
+                            <span class="results-count" id="resultsCount"></span>
+                        </div>
+                        <div class="tabs">
+                            <button class="tab-btn active" data-filter="all" onclick="toggleFilter(this)">全部</button>
+                            <button class="tab-btn" data-filter="error" onclick="toggleFilter(this)">错误</button>
+                            <button class="tab-btn" data-filter="warning" onclick="toggleFilter(this)">警告</button>
+                            <button class="tab-btn" data-filter="success" onclick="toggleFilter(this)">正常</button>
+                        </div>
+                    </div>
+                    <div class="results-grid" id="resultsList">
+                        <div class="empty-state">
+                            <div class="empty-icon">...</div>
+                            <div class="empty-title">尚未执行诊断</div>
+                            <div class="empty-desc">点击上方"开始检测"按钮</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="right-panel">
+                <div class="score-card">
+                    <div class="score-title">诊断摘要</div>
+                    <div class="score-circle">
+                        <svg width="140" height="140" viewBox="0 0 140 140">
+                            <circle class="bg" cx="70" cy="70" r="65"/>
+                            <circle class="progress" id="scoreProgress" cx="70" cy="70" r="65"/>
+                        </svg>
+                        <div class="score-number" id="healthScore">-</div>
+                    </div>
+                    <div class="score-label">健康评分</div>
+                </div>
+
+                <div class="summary-card">
+                    <div class="summary-title">问题统计</div>
+                    <div class="summary-grid">
+                        <div class="summary-item">
+                            <div class="summary-dot pass"></div>
+                            <span class="summary-label">通过</span>
+                            <span class="summary-count" id="passCount">-</span>
+                        </div>
+                        <div class="summary-item">
+                            <div class="summary-dot warn"></div>
+                            <span class="summary-label">警告</span>
+                            <span class="summary-count" id="warningCount">-</span>
+                        </div>
+                        <div class="summary-item">
+                            <div class="summary-dot error"></div>
+                            <span class="summary-label">错误</span>
+                            <span class="summary-count" id="errorCount">-</span>
+                        </div>
+                        <div class="summary-item">
+                            <div class="summary-dot critical"></div>
+                            <span class="summary-label">致命</span>
+                            <span class="summary-count" id="criticalCount">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="actions-card">
+                    <div class="actions-title">快速操作</div>
+                    <div class="actions-grid">
+                        <button class="action-btn" onclick="runAutoFix()" id="btnFix">
+                            <div class="action-icon">X</div><span>自动修复</span>
+                        </button>
+                        <button class="action-btn" onclick="quickFix('proxy')">
+                            <div class="action-icon">-</div><span>清除代理</span>
+                        </button>
+                        <button class="action-btn" onclick="quickFix('github')">
+                            <div class="action-icon">O</div><span>修复GitHub</span>
+                        </button>
+                        <button class="action-btn" onclick="quickFix('dns')">
+                            <div class="action-icon">R</div><span>刷新DNS</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="fixes-card">
+                    <div class="fixes-header">
+                        <div class="fixes-title">解决方案</div>
+                        <div class="fixes-count" id="fixesCount"></div>
+                    </div>
+                    <div class="fixes-list" id="fixesList">
+                        <div class="fixes-empty">执行检测后将显示问题解决方案</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
