@@ -6,6 +6,7 @@
 
 import subprocess
 import sys
+import re
 from typing import List, Tuple, Optional
 from dataclasses import dataclass
 
@@ -158,6 +159,110 @@ class RepairEngine:
             risk_level="中"
         )
 
+    def _create_winsock_reset_action(self) -> RepairAction:
+        """创建Winsock重置操作"""
+        return RepairAction(
+            name="重置Winsock目录",
+            description="重置网络套接字目录，修复网络协议栈异常",
+            command=["netsh", "winsock", "reset"],
+            risk_level="中"
+        )
+
+    def _create_tcpip_reset_action(self) -> RepairAction:
+        """创建TCP/IP协议栈重置操作"""
+        return RepairAction(
+            name="重置TCP/IP协议栈",
+            description="重置IP配置，修复网络层问题",
+            command=["netsh", "int", "ip", "reset"],
+            risk_level="中"
+        )
+
+    def _create_ip_release_action(self) -> RepairAction:
+        """创建IP释放操作"""
+        return RepairAction(
+            name="释放IP地址",
+            description="释放当前DHCP分配的IP地址",
+            command=["ipconfig", "/release"],
+            risk_level="低"
+        )
+
+    def _create_ip_renew_action(self) -> RepairAction:
+        """创建IP续租操作"""
+        return RepairAction(
+            name="重新获取IP地址",
+            description="通过DHCP重新获取IP配置",
+            command=["ipconfig", "/renew"],
+            risk_level="低"
+        )
+
+    def _create_firewall_enable_action(self) -> RepairAction:
+        """创建启用防火墙操作"""
+        return RepairAction(
+            name="启用防火墙",
+            description="启用所有网络配置文件的Windows防火墙",
+            command=["netsh", "advfirewall", "set", "allprofiles", "state", "on"],
+            risk_level="低"
+        )
+
+    def _create_mtu_fix_action(self, interface: str = "") -> RepairAction:
+        """创建MTU修复操作"""
+        if interface:
+            cmd = ["netsh", "interface", "ipv4", "set", "subinterface", interface, "mtu=1500", "store=persistent"]
+        else:
+            cmd = ["netsh", "interface", "ipv4", "set", "subinterface", "\"以太网\"", "mtu=1500", "store=persistent"]
+        return RepairAction(
+            name="修复MTU设置",
+            description="将MTU设置为标准值1500",
+            command=cmd,
+            risk_level="低"
+        )
+
+    def _create_dns_set_action(self, dns_server: str = "223.5.5.5") -> RepairAction:
+        """创建DNS设置操作"""
+        return RepairAction(
+            name=f"设置DNS为{dns_server}",
+            description=f"将首选DNS设置为{dns_server}",
+            command=["netsh", "interface", "ipv4", "set", "dns", "\"以太网\"", "static", dns_server],
+            risk_level="低"
+        )
+
+    def _create_network_adapter_reset_action(self) -> RepairAction:
+        """创建网络适配器重置操作"""
+        if self.platform == "win32":
+            cmd = [
+                "powershell", "-Command",
+                "Get-NetAdapter | Where-Object {$_.Status -eq 'Up'} | Disable-NetAdapter -Confirm:$false; Start-Sleep -Seconds 2; Get-NetAdapter | Enable-NetAdapter -Confirm:$false"
+            ]
+        else:
+            cmd = None
+        return RepairAction(
+            name="重置网络适配器",
+            description="禁用再启用网络适配器",
+            command=cmd,
+            risk_level="中"
+        )
+
+    def _create_arp_cache_clear_action(self) -> RepairAction:
+        """创建ARP缓存清除操作"""
+        return RepairAction(
+            name="清除ARP缓存",
+            description="清除ARP表，解决IP-MAC映射异常",
+            command=["netsh", "interface", "ip", "delete", "arpcache"],
+            risk_level="低"
+        )
+
+    def _create_network_reset_all_action(self) -> List[RepairAction]:
+        """创建网络全面重置操作序列"""
+        actions = [
+            self._create_winsock_reset_action(),
+            self._create_tcpip_reset_action(),
+            self._create_ip_release_action(),
+            self._create_ip_renew_action(),
+            self._create_dns_flush_action(),
+            self._create_arp_cache_clear_action(),
+        ]
+        return actions
+
     def _create_git_reset_network_action(self) -> RepairAction:
         """创建Git网络配置重置操作"""
         actions = []
@@ -183,23 +288,144 @@ class RepairEngine:
         """根据诊断结果检测并准备修复操作"""
         self.clear_actions()
 
+        has_critical = False
+        has_gateway_issue = False
+        has_dns_issue = False
+        has_proxy_issue = False
+        has_firewall_issue = False
+        has_mtu_issue = False
+        has_dhcp_issue = False
+        has_ip_conflict = False
+        has_connection_issue = False
+
         for result in diagnostic_results:
-            if result.status.value in ["严重", "警告"]:
-                if "代理端口未监听" in result.message or "无效代理" in result.message:
-                    self.add_action(self._git_config_unset("http.proxy"))
-                    self.add_action(self._git_config_unset("https.proxy"))
+            if result.status.value not in ["致命", "严重", "警告"]:
+                continue
 
-                if "Git SSL验证" in result.test_name and result.status.value == "警告":
-                    self.add_action(self._create_git_ssl_disable_action())
+            if result.status.value in ["致命", "严重"]:
+                has_critical = True
 
-                if "端口连接失败" in result.message and "github.com" in result.message:
-                    self.add_action(self._create_git_ssl_disable_action())
+            if "代理端口未监听" in result.message or "无效代理" in result.message or "代理端口未监听" in result.details:
+                has_proxy_issue = True
 
-                if "DNS" in result.component and result.status.value == "错误":
-                    self.add_action(self._create_dns_flush_action())
+            if "Git SSL验证" in result.test_name and result.status.value == "警告":
+                self.add_action(self._create_git_ssl_enable_action())
 
-                if "系统代理" in result.test_name and result.status.value == "警告":
-                    self.add_action(self._create_system_proxy_clear_action())
+            if "端口连接失败" in result.message and "github.com" in result.message:
+                self.add_action(self._create_git_ssl_enable_action())
+
+            if "DNS" in result.component and result.status.value in ["严重", "致命"]:
+                has_dns_issue = True
+
+            if "系统代理" in result.test_name and result.status.value in ["警告", "严重"]:
+                has_proxy_issue = True
+
+            if "网关" in result.test_name and result.status.value in ["致命", "严重"]:
+                has_gateway_issue = True
+
+            if "IP地址冲突" in result.test_name and result.status.value in ["严重", "致命"]:
+                has_ip_conflict = True
+
+            if "DHCP" in result.test_name and result.status.value in ["严重", "致命"]:
+                has_dhcp_issue = True
+
+            if "域名解析" in result.test_name and result.status.value in ["严重", "致命"]:
+                has_dns_issue = True
+
+            if "Git代理配置" in result.test_name and "代理端口未监听" in result.message:
+                has_proxy_issue = True
+
+            if "防火墙" in result.test_name and result.status.value in ["严重", "致命"]:
+                has_firewall_issue = True
+
+            if "MTU" in result.test_name and result.status.value in ["警告", "严重"]:
+                has_mtu_issue = True
+
+            if "CLOSE_WAIT" in result.message or "SYN_SENT" in result.message:
+                has_connection_issue = True
+
+            if "WiFi信号弱" in result.message:
+                self.add_action(RepairAction(
+                    name="重置WiFi适配器",
+                    description="禁用再启用WiFi适配器以改善连接",
+                    command=["powershell", "-Command",
+                             "Get-NetAdapter | Where-Object {$_.PhysicalMediaType -match 'Wireless|802.11'} | Restart-NetAdapter -Confirm:$false"],
+                    risk_level="中"
+                ))
+
+            if "WiFi信号一般" in result.message:
+                self.add_action(RepairAction(
+                    name="改善WiFi连接",
+                    description="靠近路由器或切换到5GHz频段",
+                    command=["powershell", "-Command",
+                             "Get-NetAdapter | Where-Object {$_.PhysicalMediaType -match 'Wireless|802.11'} | Restart-NetAdapter -Confirm:$false"],
+                    risk_level="低"
+                ))
+
+            if "网卡" in result.test_name and ("禁用" in result.message or "Down" in result.message):
+                self.add_action(RepairAction(
+                    name="启用网络适配器",
+                    description="启用被禁用的网络适配器",
+                    command=["powershell", "-Command",
+                             "Get-NetAdapter | Where-Object {$_.Status -eq 'Disabled'} | Enable-NetAdapter -Confirm:$false"],
+                    risk_level="低"
+                ))
+
+            if "网线" in result.test_name and "未连接" in result.message:
+                pass
+
+            if "公网" in result.test_name and result.status.value in ["致命", "严重"]:
+                self.add_action(self._create_winsock_reset_action())
+                self.add_action(self._create_dns_flush_action())
+
+            if "路由" in result.test_name and "警告" in result.status.value:
+                self.add_action(self._create_winsock_reset_action())
+                self.add_action(self._create_dns_flush_action())
+
+            if "TIME_WAIT" in result.message and int(re.search(r'TIME_WAIT:\s*(\d+)', result.message).group(1) if re.search(r'TIME_WAIT:\s*(\d+)', result.message) else 0) > 500:
+                self.add_action(self._create_winsock_reset_action())
+
+        if has_proxy_issue:
+            self.add_action(self._git_config_unset("http.proxy"))
+            self.add_action(self._git_config_unset("https.proxy"))
+            self.add_action(self._create_system_proxy_clear_action())
+
+        if has_dns_issue:
+            self.add_action(self._create_dns_flush_action())
+            self.add_action(self._create_dns_set_action("223.5.5.5"))
+
+        if has_gateway_issue:
+            self.add_action(self._create_winsock_reset_action())
+            self.add_action(self._create_tcpip_reset_action())
+            self.add_action(self._create_ip_release_action())
+            self.add_action(self._create_ip_renew_action())
+            self.add_action(self._create_arp_cache_clear_action())
+
+        if has_ip_conflict:
+            self.add_action(self._create_ip_release_action())
+            self.add_action(self._create_ip_renew_action())
+            self.add_action(self._create_arp_cache_clear_action())
+
+        if has_dhcp_issue:
+            self.add_action(self._create_ip_release_action())
+            self.add_action(self._create_ip_renew_action())
+
+        if has_firewall_issue:
+            self.add_action(self._create_firewall_enable_action())
+
+        if has_mtu_issue:
+            self.add_action(self._create_mtu_fix_action())
+
+        if has_connection_issue:
+            self.add_action(self._create_winsock_reset_action())
+            self.add_action(self._create_dns_flush_action())
+            self.add_action(self._create_arp_cache_clear_action())
+
+        if has_critical and not has_gateway_issue and not has_dns_issue:
+            self.add_action(self._create_winsock_reset_action())
+            self.add_action(self._create_dns_flush_action())
+            self.add_action(self._create_ip_release_action())
+            self.add_action(self._create_ip_renew_action())
 
         if not self.actions:
             self.add_action(RepairAction(
@@ -211,10 +437,21 @@ class RepairEngine:
 
         return self.actions
 
+    def add_result_suggestion(self, result):
+        """为无法自动修复的问题添加建议到actions列表"""
+        if result.suggestion:
+            self.add_action(RepairAction(
+                name=f"建议: {result.test_name}",
+                description=result.suggestion,
+                command=None,
+                risk_level="无"
+            ))
+
     def execute_all_fixes(self) -> Tuple[int, int, List[str]]:
         """执行所有修复操作"""
         success_count = 0
         fail_count = 0
+        suggestion_count = 0
         messages = []
 
         for action in self.actions:
@@ -233,7 +470,16 @@ class RepairEngine:
                     "message": message
                 })
             else:
-                messages.append(f"ℹ️ {action.description}")
+                if "无操作" in action.name:
+                    messages.append("ℹ️ 未检测到需要修复的问题")
+                elif "建议:" in action.name:
+                    messages.append(f"💡 {action.description}")
+                    suggestion_count += 1
+                else:
+                    messages.append(f"ℹ️ {action.description}")
+
+        if suggestion_count > 0:
+            messages.append(f"\n📋 另有 {suggestion_count} 条手动修复建议，请查看详情")
 
         return success_count, fail_count, messages
 

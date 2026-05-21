@@ -169,7 +169,16 @@ def get_status_summary(results):
         'gateway': '检测失败',
         'gateway_status': False,
         'public_net': '检测失败',
-        'public_net_status': False
+        'public_net_status': False,
+        'latency': '-',
+        'dns_server': '-',
+        'proxy_status': '无代理',
+        'git_ssl': '-',
+        'proxy_ports': '-',
+        'wifi_signal': '-',
+        'firewall': '-',
+        'mtu': '-',
+        'connections': '-'
     }
 
     for result in results:
@@ -183,10 +192,55 @@ def get_status_summary(results):
             if match:
                 status['gateway'] = match.group(0)
             status['gateway_status'] = True
+            latency_match = re.search(r'延迟:\s*([\d.]+)ms', result.message)
+            if latency_match:
+                status['latency'] = latency_match.group(1) + 'ms'
 
         if '公网连通性' in result.test_name and result.status == Severity.SUCCESS:
             status['public_net'] = '正常'
             status['public_net_status'] = True
+
+        if 'DNS服务器-' in result.test_name and result.status == Severity.SUCCESS and status['dns_server'] == '-':
+            dns_match = re.search(r'DNS服务器-(.+?)\(', result.test_name)
+            if dns_match:
+                status['dns_server'] = dns_match.group(1)
+
+        if '系统代理' in result.test_name and result.status == Severity.SUCCESS:
+            status['proxy_status'] = '无代理'
+        elif '系统代理' in result.test_name and result.status == Severity.INFO:
+            status['proxy_status'] = '已配置'
+
+        if 'Git SSL验证' in result.test_name:
+            if result.status == Severity.SUCCESS:
+                status['git_ssl'] = '已启用'
+            elif result.status == Severity.WARNING:
+                status['git_ssl'] = '已禁用'
+
+        if '代理端口监听' in result.test_name and result.status == Severity.SUCCESS:
+            port_match = re.search(r'端口监听正常:\s*([\d,\s]+)', result.message)
+            if port_match:
+                status['proxy_ports'] = port_match.group(1).strip()
+
+        if 'WiFi信号' in result.test_name:
+            signal_match = re.search(r'(\d+)%', result.message)
+            if signal_match:
+                status['wifi_signal'] = signal_match.group(1) + '%'
+
+        if '防火墙状态' in result.test_name:
+            if result.status == Severity.SUCCESS:
+                status['firewall'] = '已启用'
+            elif result.status in [Severity.ERROR, Severity.WARNING]:
+                status['firewall'] = '部分关闭'
+
+        if 'MTU设置' in result.test_name and result.status == Severity.SUCCESS and status['mtu'] == '-':
+            mtu_match = re.search(r'MTU:\s*(\d+)', result.message)
+            if mtu_match:
+                status['mtu'] = mtu_match.group(1)
+
+        if '连接状态' in result.test_name and result.status == Severity.SUCCESS and status['connections'] == '-':
+            est_match = re.search(r'活跃:\s*(\d+)', result.message)
+            if est_match:
+                status['connections'] = est_match.group(1)
 
     return status
 
