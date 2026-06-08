@@ -1186,3 +1186,241 @@ body {
         grid-template-columns: 1fr;
     }
 }
+
+/* MTU管理面板样式 */
+.mtu-section {
+    margin-bottom: 16px;
+}
+
+.mtu-list {
+    background: #f9fafb;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.mtu-item {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid #e5e5e5;
+}
+
+.mtu-item:last-child {
+    border-bottom: none;
+}
+
+.mtu-item-name {
+    flex: 1;
+    font-weight: 500;
+    color: #111;
+}
+
+.mtu-item-value {
+    font-size: 1.125rem;
+    font-weight: 700;
+    margin-right: 12px;
+}
+
+.mtu-item-value.normal {
+    color: #22c55e;
+}
+
+.mtu-item-value.low {
+    color: #f59e0b;
+}
+
+.mtu-item-value.high {
+    color: #ef4444;
+}
+
+.mtu-item-status {
+    font-size: 0.75rem;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-weight: 500;
+}
+
+.mtu-item-status.normal {
+    background: #dcfce7;
+    color: #22c55e;
+}
+
+.mtu-item-status.low {
+    background: #fef3c7;
+    color: #f59e0b;
+}
+
+.mtu-item-status.high {
+    background: #fee2e2;
+    color: #ef4444;
+}
+
+.mtu-form {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.btn-secondary {
+    padding: 10px 20px;
+    background: #f3f4f6;
+    color: #374151;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-secondary:hover {
+    background: #e5e7eb;
+}
+
+.mtu-message {
+    padding: 10px 14px;
+    border-radius: 6px;
+    font-size: 0.875rem;
+}
+
+.mtu-message.success {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.mtu-message.error {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.info-label {
+    font-weight: 600;
+    color: #666;
+    margin-right: 4px;
+}
+
+.loading {
+    padding: 20px;
+    text-align: center;
+    color: #999;
+}
+
+.mtu-list:empty {
+    min-height: 80px;
+}
+
+/* 网络详情面板样式 */
+.net-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.net-card {
+    background: #f9fafb;
+    border: 1px solid #e5e5e5;
+    border-radius: 12px;
+    padding: 16px;
+    text-align: center;
+}
+
+.net-card h3 {
+    font-size: 0.875rem;
+    color: #666;
+    margin-bottom: 8px;
+}
+
+.net-speed {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #2563eb;
+}
+
+.net-tag {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    margin-left: 8px;
+}
+
+.net-tag.green { background: #dcfce7; color: #166534; }
+.net-tag.yellow { background: #fef3c7; color: #92400e; }
+.net-tag.red { background: #fee2e2; color: #991b1b; }
+
+.net-section {
+    background: #f9fafb;
+    border: 1px solid #e5e5e5;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.net-section h4 {
+    font-size: 1rem;
+    color: #111;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e5e5e5;
+}
+
+.net-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid #f3f4f6;
+}
+
+.net-row:last-child {
+    border-bottom: none;
+}
+
+.net-value {
+    font-weight: 600;
+}
+
+.net-value.green { color: #22c55e; }
+.net-value.yellow { color: #f59e0b; }
+.net-value.red { color: #ef4444; }
+.net-value.gray { color: #999; }
+
+.dns-buttons {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+}
+
+.btn-dns {
+    padding: 12px;
+    background: #fff;
+    border: 2px solid #e5e5e5;
+    border-radius: 8px;
+    cursor: pointer;
+    text-align: center;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #374151;
+    transition: all 0.2s;
+}
+
+.btn-dns:hover {
+    border-color: #2563eb;
+    background: #eff6ff;
+    color: #2563eb;
+}
+
+.btn-dns small {
+    font-size: 0.75rem;
+    color: #666;
+    font-weight: 400;
+}
+
+@media (max-width: 768px) {
+    .net-grid {
+        grid-template-columns: 1fr;
+    }
+    .dns-buttons {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}

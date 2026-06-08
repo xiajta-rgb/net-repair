@@ -741,3 +741,152 @@ async function quickFix(type) {
         isRunning = false;
     }
 }
+
+// MTU管理面板
+async function openMtuPanel() {
+    const overlay = document.getElementById("mtuOverlay");
+    overlay.classList.add("active");
+    
+    // 加载MTU和宽带信息
+    await loadMtuInfo();
+}
+
+function closeMtuPanel(event) {
+    if (event && event.target !== event.currentTarget) return;
+    const overlay = document.getElementById("mtuOverlay");
+    overlay.classList.remove("active");
+}
+
+async function loadMtuInfo() {
+    try {
+        const resp = await fetch('/api/mtu-info');
+        const data = await resp.json();
+        
+        if (data.success) {
+            // 更新宽带信息
+            if (data.broadband.success) {
+                const info = data.broadband.info;
+                document.getElementById("bbType").textContent = info.connection_type;
+                document.getElementById("bbAdapter").textContent = info.adapter_name;
+                document.getElementById("bbMac").textContent = info.mac_address || "N/A";
+                document.getElementById("bbSpeed").textContent = info.link_speed;
+                document.getElementById("bbDhcp").textContent = info.dhcp_enabled ? "已启用" : "未启用";
+                document.getElementById("bbDns").textContent = info.dns_servers.length > 0 ? info.dns_servers.join(", ") : "N/A";
+                
+                // 更新状态卡片
+                document.getElementById("broadbandStatus").textContent = info.connection_type;
+            }
+            
+            // 更新MTU列表
+            if (data.mtu.success) {
+                const mtuList = data.mtu.mtu_list;
+                const mtuListEl = document.getElementById("mtuList");
+                const selectEl = document.getElementById("mtuInterface");
+                
+                let html = "";
+                let mtuOptions = '<option value="">选择网络适配器</option>';
+                let primaryMtu = "-";
+                
+                for (let i = 0; i < mtuList.length; i++) {
+                    const item = mtuList[i];
+                    const statusClass = item.status === "正常" ? "normal" : (item.status === "偏低" ? "low" : "high");
+                    html += `<div class="mtu-item">
+                        <div class="mtu-item-name">${item.interface}</div>
+                        <div class="mtu-item-value ${statusClass}">${item.mtu}</div>
+                        <div class="mtu-item-status ${statusClass}">${item.status}</div>
+                    </div>`;
+                    mtuOptions += `<option value="${item.interface}">${item.interface} (${item.mtu})</option>`;
+                    
+                    // 记录第一个网卡的MTU作为主显示
+                    if (i === 0) primaryMtu = item.mtu;
+                }
+                
+                if (mtuList.length === 0) {
+                    html = '<div class="loading">未检测到网络适配器</div>';
+                }
+                
+                mtuListEl.innerHTML = html;
+                selectEl.innerHTML = mtuOptions;
+                
+                // 更新状态卡片
+                document.getElementById("mtuStatus").textContent = primaryMtu;
+            }
+        }
+    } catch (err) {
+        console.error('加载MTU信息失败:', err);
+    }
+}
+
+async function setMtu() {
+    const interfaceName = document.getElementById("mtuInterface").value;
+    const mtuValue = parseInt(document.getElementById("mtuValue").value);
+    const messageEl = document.getElementById("mtuMessage");
+    
+    if (!interfaceName) {
+        messageEl.className = "mtu-message error";
+        messageEl.textContent = "请先选择网络适配器";
+        return;
+    }
+    
+    if (!mtuValue || mtuValue < 576 || mtuValue > 9000) {
+        messageEl.className = "mtu-message error";
+        messageEl.textContent = "MTU值必须在576-9000之间";
+        return;
+    }
+    
+    try {
+        const resp = await fetch('/api/mtu-set', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({interface: interfaceName, mtu: mtuValue})
+        });
+        const data = await resp.json();
+        
+        if (data.success) {
+            messageEl.className = "mtu-message success";
+            messageEl.textContent = data.message;
+            // 刷新MTU列表
+            await loadMtuInfo();
+        } else {
+            messageEl.className = "mtu-message error";
+            messageEl.textContent = data.message;
+        }
+    } catch (err) {
+        messageEl.className = "mtu-message error";
+        messageEl.textContent = "设置失败: " + err.message;
+    }
+}
+
+async function resetMtu() {
+    const interfaceName = document.getElementById("mtuInterface").value;
+    const messageEl = document.getElementById("mtuMessage");
+    
+    if (!interfaceName) {
+        messageEl.className = "mtu-message error";
+        messageEl.textContent = "请先选择网络适配器";
+        return;
+    }
+    
+    try {
+        const resp = await fetch('/api/mtu-reset', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({interface: interfaceName})
+        });
+        const data = await resp.json();
+        
+        if (data.success) {
+            messageEl.className = "mtu-message success";
+            messageEl.textContent = data.message;
+            document.getElementById("mtuValue").value = 1500;
+            // 刷新MTU列表
+            await loadMtuInfo();
+        } else {
+            messageEl.className = "mtu-message error";
+            messageEl.textContent = data.message;
+        }
+    } catch (err) {
+        messageEl.className = "mtu-message error";
+        messageEl.textContent = "重置失败: " + err.message;
+    }
+}

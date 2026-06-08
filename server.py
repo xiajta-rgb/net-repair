@@ -132,6 +132,153 @@ def quick_fix():
     })
 
 
+@app.route('/api/mtu-info', methods=['GET'])
+def get_mtu_info():
+    """获取MTU信息"""
+    logger.info("📡 收到MTU信息查询请求")
+
+    mtu_result = diagnostic_engine.get_mtu_info()
+    broadband_result = diagnostic_engine.get_broadband_info()
+
+    return jsonify({
+        'success': True,
+        'mtu': mtu_result,
+        'broadband': broadband_result
+    })
+
+
+@app.route('/api/mtu-set', methods=['POST'])
+def set_mtu():
+    """设置MTU值"""
+    data = request.get_json()
+    interface = data.get('interface', '')
+    mtu_value = data.get('mtu', 1500)
+
+    if not interface:
+        return jsonify({
+            'success': False,
+            'message': '请指定网络适配器名称'
+        }), 400
+
+    if not isinstance(mtu_value, int) or mtu_value < 576 or mtu_value > 9000:
+        return jsonify({
+            'success': False,
+            'message': 'MTU值必须在576-9000之间'
+        }), 400
+
+    logger.info(f"⚙️ 收到MTU设置请求: {interface} -> {mtu_value}")
+
+    success, message = repair_engine.set_mtu(interface, mtu_value)
+
+    return jsonify({
+        'success': success,
+        'message': message
+    })
+
+
+@app.route('/api/mtu-reset', methods=['POST'])
+def reset_mtu():
+    """重置MTU为默认值1500"""
+    data = request.get_json()
+    interface = data.get('interface', '')
+
+    if not interface:
+        return jsonify({
+            'success': False,
+            'message': '请指定网络适配器名称'
+        }), 400
+
+    logger.info(f"🔄 收到MTU重置请求: {interface}")
+
+    success, message = repair_engine.reset_mtu(interface)
+
+    return jsonify({
+        'success': success,
+        'message': message
+    })
+
+
+@app.route('/api/network-info', methods=['GET'])
+def get_network_info():
+    """获取网络详细信息（网速、DNS延迟、IPv6等）"""
+    logger.info("📡 收到网络详细信息查询请求")
+
+    speedtest = diagnostic_engine.get_speedtest_info()
+    dns_latency = diagnostic_engine.get_dns_latency_info()
+    ipv6_info = diagnostic_engine.get_ipv6_info()
+    jitter_info = diagnostic_engine.get_jitter_info()
+    tcp_params = diagnostic_engine.get_tcp_params_info()
+    winsock_info = diagnostic_engine.get_winsock_info()
+    path_mtu = diagnostic_engine.get_path_mtu_info()
+
+    return jsonify({
+        'success': True,
+        'speedtest': speedtest,
+        'dns_latency': dns_latency,
+        'ipv6': ipv6_info,
+        'jitter': jitter_info,
+        'tcp_params': tcp_params,
+        'winsock': winsock_info,
+        'path_mtu': path_mtu
+    })
+
+
+@app.route('/api/set-dns', methods=['POST'])
+def set_dns():
+    """设置DNS服务器"""
+    data = request.get_json()
+    dns_primary = data.get('dns_primary', '223.5.5.5')
+    dns_secondary = data.get('dns_secondary', '')
+
+    logger.info(f"⚙️ 收到DNS设置请求: {dns_primary}")
+
+    success, message = repair_engine.set_dns(dns_primary, dns_secondary)
+
+    return jsonify({
+        'success': success,
+        'message': message
+    })
+
+
+@app.route('/api/optimize-tcp', methods=['POST'])
+def optimize_tcp():
+    """优化TCP参数"""
+    logger.info("⚡ 收到TCP优化请求")
+
+    success, message = repair_engine.optimize_tcp()
+
+    return jsonify({
+        'success': success,
+        'message': message
+    })
+
+
+@app.route('/api/reset-winsock', methods=['POST'])
+def reset_winsock():
+    """重置Winsock"""
+    logger.info("🔄 收到Winsock重置请求")
+
+    success, message = repair_engine.reset_winsock()
+
+    return jsonify({
+        'success': success,
+        'message': message
+    })
+
+
+@app.route('/api/reset-tcpip', methods=['POST'])
+def reset_tcpip():
+    """重置TCP/IP"""
+    logger.info("🔄 收到TCP/IP重置请求")
+
+    success, message = repair_engine.reset_tcpip()
+
+    return jsonify({
+        'success': success,
+        'message': message
+    })
+
+
 @app.route('/api/report', methods=['POST'])
 def export_report():
     """导出报告"""

@@ -60,6 +60,26 @@
                         <div class="status-label">代理端口</div>
                         <div class="status-value" id="proxyPortStatus">-</div>
                     </div>
+                    <div class="status-card">
+                        <div class="status-label">MTU</div>
+                        <div class="status-value" id="mtuStatus">-</div>
+                    </div>
+                    <div class="status-card">
+                        <div class="status-label">宽带</div>
+                        <div class="status-value" id="broadbandStatus">-</div>
+                    </div>
+                    <div class="status-card">
+                        <div class="status-label">网速</div>
+                        <div class="status-value" id="speedStatus">-</div>
+                    </div>
+                    <div class="status-card">
+                        <div class="status-label">抖动</div>
+                        <div class="status-value" id="jitterStatus">-</div>
+                    </div>
+                    <div class="status-card">
+                        <div class="status-label">IPv6</div>
+                        <div class="status-value" id="ipv6Status">-</div>
+                    </div>
                 </div>
 
                 <div class="progress-card">
@@ -171,6 +191,18 @@
                         <button class="action-btn" onclick="quickFix('dns')">
                             <div class="action-icon">R</div><span>刷新DNS</span>
                         </button>
+                        <button class="action-btn" onclick="openMtuPanel()">
+                            <div class="action-icon">M</div><span>MTU管理</span>
+                        </button>
+                        <button class="action-btn" onclick="openNetworkPanel()">
+                            <div class="action-icon">N</div><span>网络详情</span>
+                        </button>
+                        <button class="action-btn" onclick="runSpeedTest()">
+                            <div class="action-icon">S</div><span>网速测试</span>
+                        </button>
+                        <button class="action-btn" onclick="optimizeTCP()">
+                            <div class="action-icon">T</div><span>TCP优化</span>
+                        </button>
                     </div>
                 </div>
 
@@ -220,5 +252,300 @@
 
     <script src="knowledge.js"></script>
     <script src="app.js"></script>
+
+    <!-- MTU管理面板 -->
+    <div class="kb-overlay" id="mtuOverlay" onclick="closeMtuPanel(event)">
+        <div class="kb-modal" onclick="event.stopPropagation()">
+            <div class="kb-header">
+                <div class="kb-header-left">
+                    <span class="kb-header-icon">M</span>
+                    <div>
+                        <h2>MTU与宽带管理</h2>
+                        <p>MTU & Network Settings</p>
+                    </div>
+                </div>
+                <div class="kb-header-right">
+                    <button class="kb-close-btn" onclick="closeMtuPanel()">&#215;</button>
+                </div>
+            </div>
+            <div class="kb-body" style="padding: 20px;">
+                <!-- 宽带信息 -->
+                <div class="mtu-section">
+                    <h3 style="margin-bottom: 10px; color: #3b82f6;">宽带信息</h3>
+                    <div id="broadbandInfo" class="info-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <div class="info-item"><span class="info-label">连接类型:</span><span id="bbType">加载中...</span></div>
+                        <div class="info-item"><span class="info-label">适配器:</span><span id="bbAdapter">-</span></div>
+                        <div class="info-item"><span class="info-label">MAC地址:</span><span id="bbMac">-</span></div>
+                        <div class="info-item"><span class="info-label">连接速率:</span><span id="bbSpeed">-</span></div>
+                        <div class="info-item"><span class="info-label">DHCP:</span><span id="bbDhcp">-</span></div>
+                        <div class="info-item"><span class="info-label">DNS服务器:</span><span id="bbDns">-</span></div>
+                    </div>
+                </div>
+
+                <!-- MTU列表 -->
+                <div class="mtu-section" style="margin-top: 20px;">
+                    <h3 style="margin-bottom: 10px; color: #3b82f6;">MTU设置</h3>
+                    <div id="mtuList" class="mtu-list">
+                        <div class="loading">加载中...</div>
+                    </div>
+                </div>
+
+                <!-- MTU修改 -->
+                <div class="mtu-section" style="margin-top: 20px;">
+                    <h3 style="margin-bottom: 10px; color: #3b82f6;">修改MTU</h3>
+                    <div class="mtu-form">
+                        <select id="mtuInterface" class="mtu-select" style="flex: 1; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px;">
+                            <option value="">选择网络适配器</option>
+                        </select>
+                        <input type="number" id="mtuValue" class="mtu-input" placeholder="MTU值 (576-9000)" min="576" max="9000" value="1500" style="width: 120px; padding: 10px; border: 1px solid #d1d5db; border-radius: 6px;">
+                        <button class="btn-primary" onclick="setMtu()">设置</button>
+                        <button class="btn-secondary" onclick="resetMtu()">重置1500</button>
+                    </div>
+                    <div id="mtuMessage" class="mtu-message" style="margin-top: 10px;"></div>
+                </div>
+
+                <!-- 知识说明 -->
+                <div class="mtu-section" style="margin-top: 20px; padding: 15px; background: #f3f4f6; border-radius: 8px;">
+                    <h4 style="margin-bottom: 8px; color: #6b7280;">💡 MTU小知识</h4>
+                    <ul style="font-size: 13px; color: #6b7280; padding-left: 20px; line-height: 1.8;">
+                        <li>标准以太网MTU: <strong>1500字节</strong></li>
+                        <li>PPPoE宽带: <strong>1492字节</strong> (需减去8字节PPPoE头)</li>
+                        <li>VPN隧道: <strong>1400字节</strong> (VPN封装增加头部)</li>
+                        <li>MTU过大会导致数据包分片，增加延迟和丢包风险</li>
+                        <li>建议: 如遇部分网站打不开，可尝试降低MTU至1480或1492</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MTU管理内联脚本 -->
+    <script>
+    async function openMtuPanel() {
+        const overlay = document.getElementById("mtuOverlay");
+        overlay.classList.add("active");
+        await loadMtuInfo();
+    }
+    
+    function closeMtuPanel(event) {
+        if (event && event.target !== event.currentTarget) return;
+        const overlay = document.getElementById("mtuOverlay");
+        overlay.classList.remove("active");
+    }
+    
+    async function loadMtuInfo() {
+        try {
+            const resp = await fetch('/api/mtu-info');
+            const data = await resp.json();
+            if (data.success) {
+                if (data.broadband.success) {
+                    const info = data.broadband.info;
+                    document.getElementById("bbType").textContent = info.connection_type;
+                    document.getElementById("bbAdapter").textContent = info.adapter_name;
+                    document.getElementById("bbMac").textContent = info.mac_address || "N/A";
+                    document.getElementById("bbSpeed").textContent = info.link_speed;
+                    document.getElementById("bbDhcp").textContent = info.dhcp_enabled ? "已启用" : "未启用";
+                    document.getElementById("bbDns").textContent = info.dns_servers.length > 0 ? info.dns_servers.join(", ") : "N/A";
+                    document.getElementById("broadbandStatus").textContent = info.connection_type;
+                }
+                if (data.mtu.success) {
+                    const mtuList = data.mtu.mtu_list;
+                    const mtuListEl = document.getElementById("mtuList");
+                    const selectEl = document.getElementById("mtuInterface");
+                    let html = "";
+                    let mtuOptions = '<option value="">选择网络适配器</option>';
+                    let primaryMtu = "-";
+                    for (let i = 0; i < mtuList.length; i++) {
+                        const item = mtuList[i];
+                        const statusClass = item.status === "正常" ? "normal" : (item.status === "偏低" ? "low" : "high");
+                        html += '<div class="mtu-item"><div class="mtu-item-name">' + item.interface + '</div><div class="mtu-item-value ' + statusClass + '">' + item.mtu + '</div><div class="mtu-item-status ' + statusClass + '">' + item.status + '</div></div>';
+                        mtuOptions += '<option value="' + item.interface + '">' + item.interface + ' (' + item.mtu + ')</option>';
+                        if (i === 0) primaryMtu = item.mtu;
+                    }
+                    if (mtuList.length === 0) html = '<div class="loading">未检测到网络适配器</div>';
+                    mtuListEl.innerHTML = html;
+                    selectEl.innerHTML = mtuOptions;
+                    document.getElementById("mtuStatus").textContent = primaryMtu;
+                }
+            }
+        } catch (err) { console.error('加载MTU信息失败:', err); }
+    }
+    
+    async function setMtu() {
+        const interfaceName = document.getElementById("mtuInterface").value;
+        const mtuValue = parseInt(document.getElementById("mtuValue").value);
+        const messageEl = document.getElementById("mtuMessage");
+        if (!interfaceName) { messageEl.className = "mtu-message error"; messageEl.textContent = "请先选择网络适配器"; return; }
+        if (!mtuValue || mtuValue < 576 || mtuValue > 9000) { messageEl.className = "mtu-message error"; messageEl.textContent = "MTU值必须在576-9000之间"; return; }
+        try {
+            const resp = await fetch('/api/mtu-set', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({interface: interfaceName, mtu: mtuValue})});
+            const data = await resp.json();
+            if (data.success) { messageEl.className = "mtu-message success"; messageEl.textContent = data.message; await loadMtuInfo(); }
+            else { messageEl.className = "mtu-message error"; messageEl.textContent = data.message; }
+        } catch (err) { messageEl.className = "mtu-message error"; messageEl.textContent = "设置失败: " + err.message; }
+    }
+    
+    async function resetMtu() {
+        const interfaceName = document.getElementById("mtuInterface").value;
+        const messageEl = document.getElementById("mtuMessage");
+        if (!interfaceName) { messageEl.className = "mtu-message error"; messageEl.textContent = "请先选择网络适配器"; return; }
+        try {
+            const resp = await fetch('/api/mtu-reset', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({interface: interfaceName})});
+            const data = await resp.json();
+            if (data.success) { messageEl.className = "mtu-message success"; messageEl.textContent = data.message; document.getElementById("mtuValue").value = 1500; await loadMtuInfo(); }
+            else { messageEl.className = "mtu-message error"; messageEl.textContent = data.message; }
+        } catch (err) { messageEl.className = "mtu-message error"; messageEl.textContent = "重置失败: " + err.message; }
+    }
+    
+    // 网络详情面板
+    async function openNetworkPanel() {
+        const overlay = document.getElementById("netOverlay");
+        overlay.classList.add("active");
+        await loadNetworkInfo();
+    }
+    
+    function closeNetworkPanel(event) {
+        if (event && event.target !== event.currentTarget) return;
+        const overlay = document.getElementById("netOverlay");
+        overlay.classList.remove("active");
+    }
+    
+    async function loadNetworkInfo() {
+        try {
+            const resp = await fetch('/api/network-info');
+            const data = await resp.json();
+            if (data.success) {
+                // 更新网速
+                if (data.speedtest.success) {
+                    document.getElementById("speedStatus").textContent = data.speedtest.speed_mbps + " Mbps";
+                    document.getElementById("netSpeed").textContent = data.speedtest.speed_mbps + " Mbps";
+                }
+                // 更新抖动
+                if (data.jitter.success) {
+                    document.getElementById("jitterStatus").textContent = data.jitter.stability;
+                    document.getElementById("netJitter").innerHTML = '延迟: ' + data.jitter.avg + 'ms, 抖动: ' + data.jitter.jitter + 'ms <span class="net-tag ' + (data.jitter.jitter < 5 ? 'green' : data.jitter.jitter < 15 ? 'yellow' : 'red') + '">' + data.jitter.stability + '</span>';
+                }
+                // 更新IPv6
+                if (data.ipv6.success) {
+                    const ipv6Text = data.ipv6.has_global_ipv6 ? "已启用" : "未配置";
+                    document.getElementById("ipv6Status").textContent = ipv6Text;
+                    document.getElementById("netIpv6").textContent = ipv6Text;
+                }
+                // DNS延迟
+                if (data.dns_latency.success) {
+                    let dnsHtml = '<div class="net-section"><h4>DNS延迟对比</h4>';
+                    const sortedDns = data.dns_latency.dns_latency.sort((a, b) => a.latency - b.latency);
+                    for (const dns of sortedDns) {
+                        const color = dns.available ? (dns.latency < 50 ? 'green' : dns.latency < 100 ? 'yellow' : 'red') : 'gray';
+                        dnsHtml += '<div class="net-row"><span>' + dns.name + '</span><span class="net-value ' + color + '">' + (dns.available ? dns.latency + 'ms' : '不可用') + '</span></div>';
+                    }
+                    dnsHtml += '</div>';
+                    document.getElementById("netDns").innerHTML = dnsHtml;
+                }
+                // TCP参数
+                if (data.tcp_params.success) {
+                    let tcpHtml = '<div class="net-section"><h4>TCP优化状态</h4>';
+                    for (const [key, value] of Object.entries(data.tcp_params.params)) {
+                        tcpHtml += '<div class="net-row"><span>' + key + '</span><span class="net-value">' + value + '</span></div>';
+                    }
+                    tcpHtml += '</div>';
+                    document.getElementById("netTcp").innerHTML = tcpHtml;
+                }
+                // Winsock
+                if (data.winsock.success) {
+                    document.getElementById("netWinsock").innerHTML = '<div class="net-section"><h4>Winsock状态</h4><div class="net-row"><span>提供商数量</span><span class="net-value">' + data.winsock.provider_count + '</span></div><div class="net-row"><span>状态</span><span class="net-value ' + (data.winsock.status === '正常' ? 'green' : 'red') + '">' + data.winsock.status + '</span></div></div>';
+                }
+                // 路径MTU
+                if (data.path_mtu.success) {
+                    document.getElementById("netMtu").innerHTML = '<div class="net-section"><h4>路径MTU发现</h4><div class="net-row"><span>目标地址</span><span class="net-value">' + data.path_mtu.target + '</span></div><div class="net-row"><span>推荐MTU</span><span class="net-value">' + data.path_mtu.discovered_mtu + '</span></div></div>';
+                }
+            }
+        } catch (err) { console.error('加载网络信息失败:', err); }
+    }
+    
+    async function runSpeedTest() {
+        if (confirm('网速测试需要下载测试文件，是否继续？')) {
+            try {
+                const resp = await fetch('/api/network-info');
+                const data = await resp.json();
+                if (data.success && data.speedtest.success) {
+                    alert('网速测试完成: ' + data.speedtest.speed_mbps + ' Mbps\n(下载' + (data.speedtest.file_size / 1024 / 1024).toFixed(2) + 'MB用时' + data.speedtest.download_time + '秒)');
+                } else {
+                    alert('网速测试失败，请检查网络连接');
+                }
+            } catch (err) { alert('网速测试失败: ' + err.message); }
+        }
+    }
+    
+    async function optimizeTCP() {
+        if (confirm('TCP优化将调整网络参数以提升性能，是否继续？')) {
+            try {
+                const resp = await fetch('/api/optimize-tcp', {method: 'POST'});
+                const data = await resp.json();
+                alert(data.success ? 'TCP优化成功！\n\n' + data.message : 'TCP优化失败:\n' + data.message);
+            } catch (err) { alert('TCP优化失败: ' + err.message); }
+        }
+    }
+    
+    async function setFastDNS(dns) {
+        const dnsMap = {'ali': '223.5.5.5', 'tencent': '119.29.29.29', 'google': '8.8.8.8', 'cloudflare': '1.1.1.1'};
+        const dnsServer = dnsMap[dns] || '223.5.5.5';
+        if (confirm('将DNS设置为 ' + dnsServer + '，是否继续？')) {
+            try {
+                const resp = await fetch('/api/set-dns', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({dns_primary: dnsServer})});
+                const data = await resp.json();
+                alert(data.success ? 'DNS设置成功！\n\n' + data.message : 'DNS设置失败:\n' + data.message);
+            } catch (err) { alert('DNS设置失败: ' + err.message); }
+        }
+    }
+    </script>
+    
+    <!-- 网络详情面板 -->
+    <div class="kb-overlay" id="netOverlay" onclick="closeNetworkPanel(event)">
+        <div class="kb-modal" onclick="event.stopPropagation()">
+            <div class="kb-header">
+                <div class="kb-header-left">
+                    <span class="kb-header-icon">N</span>
+                    <div>
+                        <h2>网络详情</h2>
+                        <p>Network Details</p>
+                    </div>
+                </div>
+                <div class="kb-header-right">
+                    <button class="kb-close-btn" onclick="closeNetworkPanel()">&#215;</button>
+                </div>
+            </div>
+            <div class="kb-body" style="padding: 20px; overflow-y: auto;">
+                <div class="net-grid">
+                    <div class="net-card">
+                        <h3>网速测试</h3>
+                        <div class="net-speed" id="netSpeed">- Mbps</div>
+                        <button class="btn-primary" style="margin-top: 10px; width: 100%;" onclick="runSpeedTest()">重新测速</button>
+                    </div>
+                    <div class="net-card">
+                        <h3>网络稳定性</h3>
+                        <div id="netJitter">加载中...</div>
+                    </div>
+                    <div class="net-card">
+                        <h3>IPv6状态</h3>
+                        <div id="netIpv6">-</div>
+                    </div>
+                </div>
+                <div id="netDns"></div>
+                <div id="netTcp"></div>
+                <div id="netWinsock"></div>
+                <div id="netMtu"></div>
+                <div class="net-section" style="margin-top: 20px;">
+                    <h4>快速DNS切换</h4>
+                    <div class="dns-buttons">
+                        <button class="btn-dns" onclick="setFastDNS('ali')">阿里DNS<br><small>223.5.5.5</small></button>
+                        <button class="btn-dns" onclick="setFastDNS('tencent')">腾讯DNS<br><small>119.29.29.29</small></button>
+                        <button class="btn-dns" onclick="setFastDNS('cloudflare')">CF DNS<br><small>1.1.1.1</small></button>
+                        <button class="btn-dns" onclick="setFastDNS('google')">Google<br><small>8.8.8.8</small></button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

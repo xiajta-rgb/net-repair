@@ -35,7 +35,8 @@ class RepairAction:
                 self.command,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                text=True,
+                encoding='utf-8',
+                errors='replace',
                 timeout=30
             )
 
@@ -582,3 +583,141 @@ class RepairEngine:
     def clear_history(self):
         """清空修复历史"""
         self.fix_history = []
+
+    def set_mtu(self, interface: str, mtu_value: int) -> Tuple[bool, str]:
+        """设置MTU值"""
+        try:
+            cmd = [
+                "netsh", "interface", "ipv4", "set", "subinterface",
+                f'"{interface}"', f"mtu={mtu_value}", "store=persistent"
+            ]
+            result = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                encoding='utf-8',
+                errors='replace',
+                timeout=30
+            )
+            if result.returncode == 0:
+                return True, f"✅ MTU设置成功: {interface} -> {mtu_value}"
+            else:
+                return False, f"❌ MTU设置失败: {result.stderr or result.stdout}"
+        except Exception as e:
+            return False, f"❌ MTU设置异常: {str(e)}"
+
+    def reset_mtu(self, interface: str) -> Tuple[bool, str]:
+        """重置MTU为默认值1500"""
+        return self.set_mtu(interface, 1500)
+
+    def set_dns(self, dns_primary: str, dns_secondary: str = "") -> Tuple[bool, str]:
+        """设置DNS服务器"""
+        try:
+            messages = []
+            
+            # 设置主DNS
+            cmd1 = ["netsh", "interface", "ipv4", "set", "dns", '"以太网"', "static", dns_primary]
+            result1 = subprocess.run(cmd1, capture_output=True, encoding='utf-8', errors='replace', timeout=15)
+            
+            if result1.returncode == 0:
+                messages.append(f"主DNS已设置为 {dns_primary}")
+            else:
+                return False, f"❌ DNS设置失败: {result1.stderr}"
+            
+            # 设置备用DNS
+            if dns_secondary:
+                cmd2 = ["netsh", "interface", "ipv4", "add", "dns", '"以太网"', dns_secondary, "index=2"]
+                result2 = subprocess.run(cmd2, capture_output=True, encoding='utf-8', errors='replace', timeout=15)
+                if result2.returncode == 0:
+                    messages.append(f"备用DNS已设置为 {dns_secondary}")
+            
+            # 刷新DNS缓存
+            flush_result, _ = self.flush_dns_cache()
+            if flush_result:
+                messages.append("DNS缓存已刷新")
+            
+            return True, "✅ " + ", ".join(messages)
+        except Exception as e:
+            return False, f"❌ DNS设置异常: {str(e)}"
+
+    def reset_winsock(self) -> Tuple[bool, str]:
+        """重置Winsock目录"""
+        try:
+            cmd = ["netsh", "winsock", "reset"]
+            result = subprocess.run(cmd, capture_output=True, encoding='utf-8', errors='replace', timeout=30)
+            if result.returncode == 0:
+                return True, "✅ Winsock目录已重置，需要重启电脑生效"
+            else:
+                return False, f"❌ Winsock重置失败: {result.stderr}"
+        except Exception as e:
+            return False, f"❌ Winsock重置异常: {str(e)}"
+
+    def reset_tcpip(self) -> Tuple[bool, str]:
+        """重置TCP/IP协议栈"""
+        try:
+            cmd = ["netsh", "int", "ip", "reset"]
+            result = subprocess.run(cmd, capture_output=True, encoding='utf-8', errors='replace', timeout=30)
+            if result.returncode == 0:
+                return True, "✅ TCP/IP协议栈已重置，需要重启电脑生效"
+            else:
+                return False, f"❌ TCP/IP重置失败: {result.stderr}"
+        except Exception as e:
+            return False, f"❌ TCP/IP重置异常: {str(e)}"
+
+    def enable_tcp_autotuning(self) -> Tuple[bool, str]:
+        """启用TCP自动调优"""
+        try:
+            cmd = ["netsh", "int", "tcp", "set", "global", "autotuninglevel=normal"]
+            result = subprocess.run(cmd, capture_output=True, encoding='utf-8', errors='replace', timeout=15)
+            if result.returncode == 0:
+                return True, "✅ TCP自动调优已启用"
+            else:
+                return False, f"❌ TCP自动调优设置失败: {result.stderr}"
+        except Exception as e:
+            return False, f"❌ TCP自动调优异常: {str(e)}"
+
+    def enable_tcp_timestamps(self) -> Tuple[bool, str]:
+        """启用TCP时间戳"""
+        try:
+            cmd = ["netsh", "int", "tcp", "set", "global", "timestamps=default"]
+            result = subprocess.run(cmd, capture_output=True, encoding='utf-8', errors='replace', timeout=15)
+            if result.returncode == 0:
+                return True, "✅ TCP时间戳已启用"
+            else:
+                return False, f"❌ TCP时间戳设置失败: {result.stderr}"
+        except Exception as e:
+            return False, f"❌ TCP时间戳异常: {str(e)}"
+
+    def enable_tcp_window_scaling(self) -> Tuple[bool, str]:
+        """启用TCP窗口缩放"""
+        try:
+            cmd = ["netsh", "int", "tcp", "set", "global", "scalingalgorithm=highpow"]
+            result = subprocess.run(cmd, capture_output=True, encoding='utf-8', errors='replace', timeout=15)
+            if result.returncode == 0:
+                return True, "✅ TCP窗口缩放已启用"
+            else:
+                return False, f"❌ TCP窗口缩放设置失败: {result.stderr}"
+        except Exception as e:
+            return False, f"❌ TCP窗口缩放异常: {str(e)}"
+
+    def optimize_tcp(self) -> Tuple[bool, str]:
+        """一键优化TCP参数"""
+        messages = []
+        all_success = True
+        
+        # 启用自动调优
+        success1, msg1 = self.enable_tcp_autotuning()
+        messages.append(msg1)
+        if not success1: all_success = False
+        
+        # 启用时间戳
+        success2, msg2 = self.enable_tcp_timestamps()
+        messages.append(msg2)
+        if not success2: all_success = False
+        
+        # 启用窗口缩放
+        success3, msg3 = self.enable_tcp_window_scaling()
+        messages.append(msg3)
+        if not success3: all_success = False
+        
+        return all_success, "\n".join(messages)

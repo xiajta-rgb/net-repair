@@ -11,6 +11,7 @@ import re
 import time
 import ipaddress
 import os
+import urllib.request
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict, Tuple
 from enum import Enum
@@ -90,7 +91,8 @@ class NetworkDiagnosticEngine:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 timeout=timeout,
-                text=True
+                encoding='utf-8',
+                errors='replace'
             )
             return result.returncode, result.stdout, result.stderr
         except subprocess.TimeoutExpired:
@@ -575,3 +577,325 @@ class NetworkDiagnosticEngine:
             return {"success": False}
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    def get_mtu_info(self) -> Dict[str, any]:
+        """获取MTU详细信息（供API调用）"""
+        try:
+            if self.platform == "win32":
+                returncode, stdout, stderr = self._run_command([
+                    "netsh", "interface", "ipv4", "show", "subinterfaces"
+                ], timeout=10)
+                
+                if returncode == 0 and stdout:
+                    mtu_list = []
+                    lines = stdout.split('\n')
+                    for line in lines:
+                        line = line.strip()
+                        if not line or line.startswith('MTU') or line.startswith('-'):
+                            continue
+                        parts = line.split()
+                        if len(parts) >= 5:
+                            try:
+                                mtu_val = int(parts[0])
+                                # 接口名从第5列开始（索引4）
+                                iface = ' '.join(parts[4:])
+                                if mtu_val > 0 and mtu_val < 10000 and 'Loopback' not in iface and 'loopback' not in iface.lower():
+                                    mtu_list.append({
+                                        "interface": iface, 
+                                        "mtu": mtu_val,
+                                        "status": "正常" if mtu_val == 1500 else ("偏低" if mtu_val < 1500 else "偏高")
+                                    })
+                            except (ValueError, IndexError):
+                                continue
+                    return {"success": True, "mtu_list": mtu_list}
+            return {"success": False, "error": "命令执行失败或无输出"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def get_broadband_info(self) -> Dict[str, any]:
+        """获取宽带/网络连接信息"""
+        try:
+            if self.platform == "win32":
+                # 获取网络适配器信息 - 使用UTF-8输出
+                returncode, stdout, stderr = self._run_command([
+                    "powershell", "-NoProfile", "-Command",
+                    "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-NetAdapter | Where-Object {$_.Status -eq 'Up'} | Select-Object Name, InterfaceDescription, MacAddress, LinkSpeed, MediaType | ConvertTo-Json -Compress"
+                ], timeout=10)
+                
+                info = {
+                    "connection_type": "未知",
+                    "adapter_name": "未知",
+                    "mac_address": "未知",
+                    "link_speed": "未知",
+                    "media_type": "未知",
+                    "dhcp_enabled": False,
+                    "ip_address": "未获取",
+                    "subnet_mask": "未获取",
+                    "gateway": "未获取",
+                    "dns_servers": []
+                }
+                
+                if returncode == 0 and stdout and stdout.strip():
+                    import json
+                    try:
+                        data = json.loads(stdout)
+                        adapters = data if isinstance(data, list) else [data]
+                        if adapters:
+                            adapter = adapters[0]
+                            info["adapter_name"] = str(adapter.get("Name", "未知"))
+                            info["mac_address"] = str(adapter.get("MacAddress", "未知"))
+                            info["link_speed"] = str(adapter.get("LinkSpeed", "未知"))
+                            info["media_type"] = str(adapter.get("MediaType", "未知"))
+                            
+                            # 判断连接类型
+                            media = info["media_type"].lower()
+                            if "wireless" in media or "wi-fi" in media or "wifi" in media:
+                                info["connection_type"] = "Wi-Fi无线"
+                            elif "ethernet" in media or "802.3" in media:
+                                info["connection_type"] = "以太网有线"
+                    except Exception as e:
+                        pass
+                
+                # 获取IP配置
+                returncode2, stdout2, _ = self._run_command([
+                    "ipconfig", "/all"
+                ], timeout=10)
+                
+                if returncode2 == 0 and stdout2:
+                    lines = stdout2.split('\n')
+                    current_adapter = None
+                    for line in lines:
+                        if '适配器' in line or 'adapter' in line.lower():
+                            current_adapter = line.strip()
+                        if current_adapter and (info["adapter_name"] in current_adapter or info["adapter_name"].replace("-", " ") in current_adapter):
+                            # DHCP
+                            dhcp_match = re.search(r'DHCP\s*已启用| DHCP enabled', line)
+                            if dhcp_match:
+                                info["dhcp_enabled"] = True
+                            # DNS
+                            dns_match = re.search(r'DNS\s*服务器.*?:\s*(\d+\.\d+\.\d+\.\d+)', line)
+                            if not dns_match:
+                                dns_match = re.search(r'DNS Servers.*?:\s*(\d+\.\d+\.\d+\.\d+)', line)
+                            if dns_match and dns_match.group(1) not in info["dns_servers"]:
+                                info["dns_servers"].append(dns_match.group(1))
+                
+                return {"success": True, "info": info}
+            return {"success": False}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def _check_ipv6_status(self) -> Dict[str, any]:
+        """检测IPv6状态"""
+        try:
+            if self.platform == "win32":
+                returncode, stdout, stderr = self._run_command([
+                    "powershell", "-NoProfile", "-Command",
+                    "Get-NetIPv6Protocol | Select-Object -Property RouterDiscoveryEnabled, AddressingMode | ConvertTo-Json"
+                ], timeout=10)
+                
+                ipv6_enabled = False
+                has_global_ipv6 = False
+                
+                # 检查IPv6是否启用
+                if returncode == 0 and stdout:
+                    ipv6_enabled = True
+                
+                # 检查是否有IPv6地址
+                returncode2, stdout2, _ = self._run_command([
+                    "ipconfig", "/all"
+                ], timeout=10)
+                
+                if returncode2 == 0 and stdout2:
+                    if "IPv6" in stdout2 and ":" in stdout2:
+                        has_global_ipv6 = True
+                
+                return {"success": True, "ipv6_enabled": ipv6_enabled, "has_global_ipv6": has_global_ipv6}
+            return {"success": False}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def _check_dns_latency(self) -> Dict[str, any]:
+        """检测各DNS服务器延迟"""
+        dns_servers = [
+            ("223.5.5.5", "阿里DNS"),
+            ("119.29.29.29", "腾讯DNS"),
+            ("8.8.8.8", "Google DNS"),
+            ("1.1.1.1", "Cloudflare DNS"),
+            ("9.9.9.9", "Quad9 DNS")
+        ]
+        
+        results = []
+        for dns_ip, dns_name in dns_servers:
+            start_time = time.time()
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                sock.settimeout(2)
+                # 简单测试：尝试DNS查询
+                sock.sendto(b'\x00\x00\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x06google\x03com\x00\x00\x01\x00\x01', (dns_ip, 53))
+                sock.recvfrom(1024)
+                latency = (time.time() - start_time) * 1000
+                results.append({"dns": dns_ip, "name": dns_name, "latency": round(latency, 1), "available": True})
+            except:
+                results.append({"dns": dns_ip, "name": dns_name, "latency": 0, "available": False})
+            finally:
+                sock.close()
+        
+        return {"success": True, "dns_latency": results}
+
+    def _check_bandwidth(self) -> Dict[str, any]:
+        """估算带宽（通过下载测试）"""
+        try:
+            import tempfile
+            import os
+            
+            test_url = "http://speedtest.tele2.net/1MB.zip"
+            test_file = os.path.join(tempfile.gettempdir(), "bandwidth_test.dat")
+            
+            start_time = time.time()
+            try:
+                urllib.request.urlretrieve(test_url, test_file)
+                download_time = time.time() - start_time
+                file_size = os.path.getsize(test_file) if os.path.exists(test_file) else 0
+                
+                if download_time > 0 and file_size > 0:
+                    speed_mbps = (file_size * 8) / (download_time * 1000000)
+                    os.remove(test_file)
+                    return {"success": True, "speed_mbps": round(speed_mbps, 2), "file_size": file_size, "download_time": round(download_time, 2)}
+            except Exception as e:
+                if os.path.exists(test_file):
+                    os.remove(test_file)
+                raise e
+            
+            return {"success": False}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def _check_latency_jitter(self) -> Dict[str, any]:
+        """检测网络延迟抖动"""
+        try:
+            gateway = self._get_default_gateway()
+            if not gateway:
+                return {"success": False, "error": "无法获取网关"}
+            
+            latencies = []
+            for _ in range(10):
+                success, latency, _ = self._ping(gateway, count=1)
+                if success and latency:
+                    latencies.append(latency)
+                time.sleep(0.1)
+            
+            if len(latencies) >= 2:
+                avg = sum(latencies) / len(latencies)
+                variance = sum((x - avg) ** 2 for x in latencies) / len(latencies)
+                std_dev = variance ** 0.5
+                jitter = std_dev
+                return {
+                    "success": True,
+                    "min": round(min(latencies), 2),
+                    "max": round(max(latencies), 2),
+                    "avg": round(avg, 2),
+                    "jitter": round(jitter, 2),
+                    "stability": "稳定" if jitter < 5 else ("一般" if jitter < 15 else "不稳定")
+                }
+            return {"success": False, "error": "采样不足"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def _check_tcp_parameters(self) -> Dict[str, any]:
+        """检测TCP优化参数"""
+        try:
+            if self.platform == "win32":
+                params = {
+                    "TcpWindowSize": "未知",
+                    "TcpTimedWaitDelay": "未知",
+                    "MaxUserPort": "未知"
+                }
+                
+                # 使用PowerShell获取TCP参数
+                returncode, stdout, _ = self._run_command([
+                    "powershell", "-NoProfile", "-Command",
+                    "netsh int tcp show global"
+                ], timeout=10)
+                
+                if returncode == 0 and stdout:
+                    for line in stdout.split('\n'):
+                        line = line.strip()
+                        if 'Receive Window' in line or 'Autotuning' in line:
+                            params[line.split(':')[0].strip()] = line.split(':')[-1].strip() if ':' in line else line
+                
+                return {"success": True, "params": params}
+            return {"success": False}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def _check_winsock_status(self) -> Dict[str, any]:
+        """检测Winsock目录状态"""
+        try:
+            if self.platform == "win32":
+                returncode, stdout, _ = self._run_command([
+                    "netsh", "winsock", "show", "catalog"
+                ], timeout=15)
+                
+                if returncode == 0:
+                    # 统计已注册的LSP/SPP数量
+                    lines = stdout.split('\n')
+                    provider_count = 0
+                    for line in lines:
+                        if 'Provider' in line and 'GUID' in line:
+                            provider_count += 1
+                    return {"success": True, "provider_count": provider_count, "status": "正常" if provider_count < 100 else "异常(过多)"}
+            return {"success": False}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def _discover_path_mtu(self, target: str = "8.8.8.8") -> Dict[str, any]:
+        """路径MTU发现"""
+        try:
+            if self.platform == "win32":
+                # 使用ping -f -l 测试不同大小的数据包
+                mtu_values = [1500, 1492, 1480, 1400, 1380, 1300]
+                discovered_mtu = 1500
+                
+                for mtu in mtu_values:
+                    cmd = ["ping", "-n", "2", "-f", "-l", str(mtu - 28), target]  # -28 是IP和ICMP头
+                    returncode, stdout, _ = self._run_command(cmd, timeout=5)
+                    
+                    if returncode == 0 and "TTL=" in stdout:
+                        discovered_mtu = mtu
+                        break
+                    elif "需要拆分" in stdout or "packets" in stdout.lower():
+                        discovered_mtu = mtu - 20
+                        break
+                
+                return {"success": True, "discovered_mtu": discovered_mtu, "target": target}
+            return {"success": False}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def get_speedtest_info(self) -> Dict[str, any]:
+        """获取网速测试信息"""
+        return self._check_bandwidth()
+
+    def get_dns_latency_info(self) -> Dict[str, any]:
+        """获取DNS延迟信息"""
+        return self._check_dns_latency()
+
+    def get_ipv6_info(self) -> Dict[str, any]:
+        """获取IPv6状态信息"""
+        return self._check_ipv6_status()
+
+    def get_jitter_info(self) -> Dict[str, any]:
+        """获取延迟抖动信息"""
+        return self._check_latency_jitter()
+
+    def get_tcp_params_info(self) -> Dict[str, any]:
+        """获取TCP参数信息"""
+        return self._check_tcp_parameters()
+
+    def get_winsock_info(self) -> Dict[str, any]:
+        """获取Winsock状态信息"""
+        return self._check_winsock_status()
+
+    def get_path_mtu_info(self, target: str = "8.8.8.8") -> Dict[str, any]:
+        """获取路径MTU信息"""
+        return self._discover_path_mtu(target)
